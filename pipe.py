@@ -62,7 +62,7 @@ class Pipe:
                 other = other()
             elif issubclass(other, object):
                 if not (hasattr(other, 'extend') or hasattr(other, 'update')):
-                    raise ValueError(
+                    raise TypeError(
                         'Pipe closers must implement extend() or update()')
                 other = other()
         if hasattr(other, 'describe_pipe'):
@@ -75,7 +75,7 @@ class Pipe:
             return other
         if isinstance(other, Pipe):
             return other.__ror__(self)
-        raise ValueError('Right-most element must be a Pipe, list, dict or set')
+        raise TypeError('Right-most element must be a Pipe, list, dict or set')
 
     def __ror__(self, other):
         """
