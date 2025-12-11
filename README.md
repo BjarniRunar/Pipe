@@ -9,6 +9,41 @@
 Module enabling a sh like infix syntax (using pipes).
 
 
+# Preamble from Bjarni
+
+This is a fork of Julien's excellent Pipe, changing behavior slightly and
+adding features which are make it possible to use this library to invoke
+and create Unix-style pipelines (as you would in the shell).  It also adds
+some syntactic magic for easier exploration in the Python REPL.
+
+Once my experimentation has settled down, I will submit a PR upsteam, but
+I don't necessarily expect all my changes to be merged as my goals differ
+somewhat from those of the original package.
+
+Example of shell exploration:
+
+```python
+>>> from pipe import *
+Running in the Python REPL: repr(Pipe) evaluates expressions
+
+    Use `sh.command` to run any shell command as a pipe, or use
+    `sh.make_pipes(globals())` to create global pipe commands from
+    common shell utilities found on your system.
+
+...
+>>> files = sh.ls | sh.grep('py') | sort(reverse=True) | list
+>>> files
+['pyproject.toml', 'pipe.py', '__pycache__']
+
+>>> sh.make_pipes(globals())
+['awk', 'bash', 'bc', 'cal', 'cat', 'col', 'cut', 'df', 'diff', ... ]
+
+>>> ls | sort | sh.Check
+# (Sh::<Cmd>('ls') | Pipe::<sort>()) head=9 seen=9
+['LICENSE', 'README.md', '__pycache__', 'pipe.egg-info', 'pipe.py', ... ]
+```
+
+
 # Introduction
 
 As an example, here is the solution for the [2nd Euler Project
