@@ -115,3 +115,68 @@ def test_pipe_repr():
     real_repr = repr(pipe_instance)
     assert "piped::<sample_pipe_with_args>(" in real_repr
     assert "3" in real_repr
+
+
+def test_pipe_input_coercion():
+    assert list(1 | pipe.sort) == [1]
+    assert list(1 | pipe.reverse) == [1]
+
+
+def test_pipe_output_coercion():
+    test_data = [1, 'foo', False, 'bar']
+    count_str = lambda i: sum(1 for e in i if isinstance(e, str))
+    assert count_str(test_data) == 2
+    assert list(test_data | pipe.Pipe(count_str)) == [2]
+
+
+def test_pipe_closing_lists():
+    assert ([1] | pipe.sort | []) == [1]
+    assert ([1] | pipe.sort | list) == [1]
+
+
+def test_pipe_closing_sets():
+    assert ([1] | pipe.sort | set()) == set([1])
+    assert ([1] | pipe.sort | set) == set([1])
+
+
+def test_pipe_closing_dicts():
+    assert (range(2) | pipe.enumerate | dict()) == {0: 0, 1: 1}
+    assert (range(2) | pipe.enumerate | dict) == {0: 0, 1: 1}
+
+
+def test_pipe_closing_object():
+    class Collector:
+        def __init__(self):
+            self.source = None
+            self.data = []
+        def describe_pipe(self, description):
+            self.source = description
+        def extend(self, values):
+            self.data.extend(values)
+
+    collected = [3, 4, 2, 1] | pipe.sort | Collector
+
+    # Introspection: the Collector knows where the data came from
+    assert collected.source == 'list | Pipe::<sort>()'
+
+    # Data was collected correctly?
+    assert collected.data == [1, 2, 3, 4]
+
+
+def test_pipe_composition():
+    pipe1 = pipe.enumerate | pipe.reverse
+    pipe2 = pipe.traverse | pipe.sort
+    pipe12 = pipe1 | pipe2
+    pipe21 = pipe2 | pipe1
+
+    assert [3, 2, 1] | pipe1 | list == [(2, 1), (1, 2), (0, 3)]
+    expected12 = [0, 1, 1, 2, 2, 3]
+    assert expected12 == [(2, 1), (1, 2), (0, 3)] | pipe2 | list
+    assert expected12 == [3, 2, 1] | pipe1 | pipe2 | list
+    assert expected12 == [3, 2, 1] | pipe12 | list
+
+    assert [3, 2, 1] | pipe2 | list == [1, 2, 3]
+    expected21 = [(2, 3), (1, 2), (0, 1)]
+    assert expected21 == [1, 2, 3] | pipe1 | list
+    assert expected21 == [3, 2, 1] | pipe2 | pipe1 | list
+    assert expected21 == [3, 2, 1] | pipe21 | list
