@@ -105,7 +105,7 @@ def test_pipe_repr():
     def sample_pipe(iterable):
         return (x * 2 for x in iterable)
 
-    assert repr(sample_pipe) == "piped::<sample_pipe>(*(), **{})"
+    assert repr(sample_pipe) == "Pipe::<sample_pipe>()"
 
     @pipe.Pipe
     def sample_pipe_with_args(iterable, factor):
@@ -113,7 +113,7 @@ def test_pipe_repr():
 
     pipe_instance = sample_pipe_with_args(3)
     real_repr = repr(pipe_instance)
-    assert "piped::<sample_pipe_with_args>(" in real_repr
+    assert "Pipe::<sample_pipe_with_args>(" in real_repr
     assert "3" in real_repr
 
 

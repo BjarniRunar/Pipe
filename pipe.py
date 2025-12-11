@@ -6,12 +6,19 @@ __credits__ = """Jérôme Schneider for teaching me the Python datamodel,
 and all contributors."""
 
 import builtins
-import functools
 import itertools
-import socket
+import functools
+import os
 import sys
+
 from collections import deque
-from contextlib import closing
+from contextlib import closing, suppress
+
+
+REPR_EVALUATES = bool(getattr(sys, 'ps1', sys.flags.interactive))
+if REPR_EVALUATES:
+    sys.stderr.write('%s\n\n' % (
+        "Running in the Python REPL: repr(Pipe) evaluates expressions."))
 
 
 class Pipe:
@@ -42,12 +49,33 @@ class Pipe:
     ...
 
     """
-
     def __init__(self, function, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
         self.function = function
+        self.input = []
         functools.update_wrapper(self, function)
+
+    def __or__(self, other):
+        with suppress(TypeError):
+            if issubclass(other, Pipe):
+                other = other()
+            elif issubclass(other, object):
+                if not (hasattr(other, 'extend') or hasattr(other, 'update')):
+                    raise ValueError(
+                        'Pipe closers must implement extend() or update()')
+                other = other()
+        if hasattr(other, 'describe_pipe'):
+            other.describe_pipe(self.describe())
+        if hasattr(other, 'extend'):
+            other.extend(self)
+            return other
+        if hasattr(other, 'update'):
+            other.update(self)
+            return other
+        if isinstance(other, Pipe):
+            return other.__ror__(self)
+        raise ValueError('Right-most element must be a Pipe, list, dict or set')
 
     def __ror__(self, other):
         """
@@ -65,10 +93,29 @@ class Pipe:
             provided arguments and keyword arguments.
 
         """
-        return self.function(other, *self.args, **self.kwargs)
+        dup = type(self)(self.function, *self.args, **self.kwargs)
+        if isinstance(self.input, Pipe):
+            dup.input = self.input.__ror__(other)
+            return dup
+        if self.input != []:
+            raise ValueError('Pipeline does not support chaining from the left')
+        dup.input = other
+        return dup
+
+    def guarantee_iterable(self, obj):
+        if hasattr(obj, '__iter__'):
+            return obj
+        elif obj is None:
+            return []
+        return [obj]
+
+    def __iter__(self):
+        _input = self.guarantee_iterable(self.input)
+        return iter(self.guarantee_iterable(
+            self.function(_input, *self.args, **self.kwargs)))
 
     def __call__(self, *args, **kwargs):
-        return Pipe(
+        return type(self)(
             self.function,
             *self.args,
             *args,
@@ -76,19 +123,50 @@ class Pipe:
             **kwargs,
         )
 
-    def __repr__(self) -> str:
-        return "piped::<%s>(*%s, **%s)" % (
+    def describe(self) -> str:
+        def _desc(obj, _types=False):
+            if hasattr(obj, 'describe'):
+                return obj.describe()
+            if _types:
+                return type(obj).__name__
+            return repr(obj)
+        return "%s%s::<%s>(%s%s%s%s)" % (
+            '%s | ' % _desc(self.input, _types=True) if self.input else '',
+            type(self).__name__,
             self.function.__name__,
-            self.args,
-            self.kwargs,
+            ', '.join(_desc(a) for a in self.args),
+            ', ' if (self.args and self.kwargs) else '',
+            '**' if self.kwargs else '',
+            '%s' % (self.kwargs,) if self.kwargs else '' ,
         )
 
+    def __repr__(self) -> str:
+        if REPR_EVALUATES:
+            return '# %s\n%s' % (self.describe(), str(self))
+        return self.describe()
+
+    def __str__(self):
+        return str(list(self))
+
     def __get__(self, instance, owner=None):
-        return Pipe(
+        return type(self)(
             function=self.function.__get__(instance, owner),
             *self.args,
             **self.kwargs,
         )
+
+
+class TextPipe(Pipe):
+    """A Pipe which emits lines of text."""
+    def __str__(self):
+        return '\n'.join('%s' % r for r in iter(self))
+
+    def guarantee_iterable(self, obj):
+        if isinstance(obj, bytes):
+            obj = str(obj, 'utf-8')
+        if isinstance(obj, str):
+            return obj.splitlines()
+        return super().guarantee_iterable(obj)
 
 
 @Pipe
@@ -160,6 +238,7 @@ def permutations(iterable, r=None):
 @Pipe
 def netcat(to_send, host, port):
     """Send and receive bytes over TCP."""
+    import socket
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.connect((host, port))
         for data in to_send | traverse:
@@ -173,12 +252,15 @@ def netcat(to_send, host, port):
 
 @Pipe
 def traverse(args):
-    if isinstance(args, (str, bytes)):
+    if isinstance(args, (bytes, str)):
         yield args
         return
     for arg in args:
+        if isinstance(arg, (bytes, str)):
+            yield arg
+            continue
         try:
-            yield from arg | traverse
+            yield from iter(arg) | traverse
         except TypeError:
             # not iterable --- output leaf
             yield arg
@@ -229,7 +311,10 @@ def sort(iterable, key=None, reverse=False):  # pylint: disable=redefined-outer-
 
 @Pipe
 def reverse(iterable):
-    return reversed(iterable)
+    try:
+        return reversed(iterable)
+    except TypeError:
+        return reversed(list(iterable))
 
 
 @Pipe
