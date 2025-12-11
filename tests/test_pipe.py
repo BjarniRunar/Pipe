@@ -17,6 +17,16 @@ def test_empty_iterable():
     assert list([] | pipe.take(999)) == []
 
 
+def test_traverse():
+    assert list('foo' | pipe.traverse) == ['foo']
+    assert list(['foo', ['bar']] | pipe.traverse) == ['foo', 'bar']
+
+
+def test_reverse():
+    assert list([1, 2, 3] | pipe.reverse) == [3, 2, 1]
+    assert list(range(3) | pipe.reverse) == [2, 1, 0]
+
+
 def test_aliasing():
     is_even = pipe.where(lambda x: not x % 2)
 
