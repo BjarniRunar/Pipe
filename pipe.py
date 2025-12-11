@@ -168,6 +168,12 @@ class TextPipe(Pipe):
             return obj.splitlines()
         return super().guarantee_iterable(obj)
 
+    def __or__(self, other):
+        with suppress(TypeError):
+            if issubclass(other, str):
+                return other(self)
+        return super().__or__(other)
+
 
 @Pipe
 def take(iterable, qte):
